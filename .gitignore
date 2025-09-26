@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.env
+pal_bot.sqlite
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
