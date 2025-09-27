@@ -16,8 +16,8 @@ GUILD = discord.Object(id=GUILD_ID) if GUILD_ID else None
 
 # Intents: enable what you actually need
 intents = discord.Intents.default()
-intents.message_content = True   # needed for some utilities & debugging
-intents.members = True           # required for role assignment / joins / reaction-role lookups
+intents.message_content = True   # needed for utilities, leveling, raids auto-detect
+intents.members = True           # required for role assignment / welcome / joins
 
 # Bot
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -49,23 +49,21 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         logging.exception("Error while handling app command error")
 
 # ---------- Cog loading ----------
+# Load only cogs we actually have right now
 COGS = [
-    # core/admin
-    "cogs.admin",            # /announce /debug /ids
-    "cogs.settings_admin",   # /settings_show /settings_set
-    # features
-    "cogs.market",           # /price /price_debug
-    "cogs.disasters",        # auto loops + /disasters_now /status
-    "cogs.welcome",          # welcome messages
-    "cogs.utilities",        # /uptime /members /rolecount
-    "cogs.moderation",       # roles/purge/kick/ban/slowmode
-    "cogs.subscriptions",    # /subscribe /unsubscribe (safe self-roles)
-    "cogs.help",             # /help
-    "cogs.polls",            # /poll /poll_close
-    "cogs.reaction_roles",   # /rr_add /rr_remove + listeners
-    "cogs.price_alerts",     # /alert_set /alert_list /alert_clear + loop
-    "cogs.raids",            # /raid_new /raid_ping /raid_status /raid_done /raid_end /raid_set
-    # optional (uncomment if you actually have it)
+    "cogs.admin",          # /announce /debug /ids /help
+    "cogs.settings_admin", # /settings_show /settings_set
+    "cogs.market",         # /price /price_debug
+    "cogs.disasters",      # polling + /disasters_now /status
+    "cogs.welcome",        # welcome embeds + DM
+    "cogs.moderation",     # roles/purge/kick/ban/slowmode
+    "cogs.raids",          # raids + auto-detect X links
+    "cogs.leveling",       # XP + /rank /top
+    "cogs.roles_setup",    # auto-create core roles + /roles_bootstrap /roles_list
+    # add more later as you create them:
+    # "cogs.polls",
+    # "cogs.reaction_roles",
+    # "cogs.price_alerts",
     # "cogs.verify",
 ]
 
@@ -89,7 +87,7 @@ async def ping(interaction: discord.Interaction):
 # ---------- Sync on ready with graceful fallback ----------
 @bot.event
 async def on_ready():
-    # Nice presence
+    # Friendly presence
     try:
         await bot.change_presence(activity=discord.Game(name="/help"))
     except Exception:

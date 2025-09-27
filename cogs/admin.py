@@ -1,34 +1,30 @@
+# cogs/admin.py
 import os
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-_GUILD_ID_RAW = os.getenv("GUILD_ID") or ""
-GUILD_ID = int(_GUILD_ID_RAW) if _GUILD_ID_RAW.isdigit() else None
-GUILD_DECORATOR = app_commands.guilds(GUILD_ID) if GUILD_ID else (lambda f: f)
-
-def ok_embed(title: str, desc: str):
-    return discord.Embed(title=title, description=desc)
+def make_embed(title: str, desc: str, color=discord.Color.blurple()):
+    return discord.Embed(title=title, description=desc, color=color)
 
 class Admin(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # ---- Admin broadcast ----
-    @GUILD_DECORATOR
-    @app_commands.command(description="Post an announcement here (Manage Server only).")
+    # ---------- Announce ----------
+    @app_commands.command(description="Post an announcement in the current channel (Manage Server only).")
     @app_commands.describe(message="Your announcement text")
     async def announce(self, interaction: discord.Interaction, message: str):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message(
-                "You need **Manage Server** permission.", ephemeral=True
+                "🚫 You need **Manage Server** permission.", ephemeral=True
             )
-        await interaction.channel.send(embed=ok_embed("📣 Announcement", message))
-        await interaction.response.send_message("Posted.", ephemeral=True)
+        embed = make_embed("📣 Announcement", message, color=discord.Color.gold())
+        await interaction.channel.send(embed=embed)
+        await interaction.response.send_message("✅ Announcement posted.", ephemeral=True)
 
-    # ---- Debug / IDs ----
-    @GUILD_DECORATOR
-    @app_commands.command(description="Show live bot config (ephemeral).")
+    # ---------- Debug ----------
+    @app_commands.command(description="Show live bot config values (ephemeral).")
     async def debug(self, interaction: discord.Interaction):
         fields = [
             ("Guild ID", os.getenv("GUILD_ID") or "—"),
@@ -36,59 +32,62 @@ class Admin(commands.Cog):
             ("Mode", os.getenv("DISASTER_MODE") or "rt"),
             ("Poll (min)", os.getenv("DISASTER_POLL_MINUTES") or "5"),
             ("USGS Min Mag", os.getenv("USGS_MIN_MAG") or "6.0"),
-            ("Digest Time UTC", os.getenv("DIGEST_TIME_UTC") or "09:00"),
             ("ReliefWeb Limit", os.getenv("RELIEFWEB_LIMIT") or "5"),
             ("ReliefWeb App", os.getenv("RELIEFWEB_APPNAME") or "—"),
-            ("Dex chain", os.getenv("DEXSCREENER_CHAIN") or "—"),
+            ("Digest Time (UTC)", os.getenv("DIGEST_TIME_UTC") or "—"),
+            ("PAL Token", os.getenv("PAL_TOKEN_ADDRESS") or "—"),
+            ("Dex Chain", os.getenv("DEXSCREENER_CHAIN") or "—"),
         ]
-        e = discord.Embed(title="🔧 Bot Debug")
+        e = discord.Embed(title="🔧 Bot Debug", color=discord.Color.greyple())
         for name, value in fields:
             e.add_field(name=name, value=value, inline=True)
         await interaction.response.send_message(embed=e, ephemeral=True)
 
-    @GUILD_DECORATOR
-    @app_commands.command(description="Show this server and channel IDs (ephemeral).")
+    # ---------- IDs ----------
+    @app_commands.command(description="Show current server and channel IDs (ephemeral).")
     async def ids(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            f"Guild: `{interaction.guild_id}`\nChannel: `{interaction.channel_id}`",
-            ephemeral=True,
+        guild_id = interaction.guild_id or "—"
+        channel_id = interaction.channel_id or "—"
+        e = discord.Embed(title="🆔 IDs", color=discord.Color.teal())
+        e.add_field(name="Guild ID", value=guild_id, inline=True)
+        e.add_field(name="Channel ID", value=channel_id, inline=True)
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+    # ---------- Help ----------
+    @app_commands.command(description="Show bot help categories.")
+    async def help(self, interaction: discord.Interaction):
+        e = discord.Embed(
+            title="🤖 Palaemon Bot – Help",
+            description="Here are the main categories of commands. Use `/` and start typing to see available commands.",
+            color=discord.Color.blurple(),
         )
-
-    # ---- Help ----
-    @GUILD_DECORATOR
-    @app_commands.command(name="help", description="Show commands & tips.")
-    async def help_cmd(self, interaction: discord.Interaction):
-        text = (
-            "**Disasters**\n"
-            "• `/disasters_now` — Fetch & post latest now\n"
-            "• `/status` — Uptime, last poll, next digest\n\n"
-            "**Admin**\n"
-            "• `/announce <message>` — Post an announcement\n"
-            "• `/debug` `/ids` — Config & IDs (ephemeral)\n"
-            "• `/settings_show` — View live settings\n"
-            "• `/settings_set key:<K> value:<V>` — Update setting (Manage Server)\n\n"
-            "**Market**\n"
-            "• `/price [query]` — Token price (0x address or text)\n"
-            "• `/price_debug [query]` — List candidate pairs (ephemeral)\n\n"
-            "Tips: Create role **Disaster Alerts** for severe-event pings; use `/settings_set` "
-            "to tweak thresholds without editing files."
+        e.add_field(
+            name="🌍 Disasters",
+            value="`/disasters_now` – Force fetch alerts\n(Daily digest goes to #general automatically)",
+            inline=False,
         )
-        await interaction.response.send_message(text, ephemeral=True)
+        e.add_field(
+            name="📊 Market",
+            value="`/price` – Show PAL or other token price\n`/price_debug` – Show raw pair info",
+            inline=False,
+        )
+        e.add_field(
+            name="👮 Moderation",
+            value="`/role_add` `/role_remove` `/purge` `/kick` `/ban` `/slowmode`",
+            inline=False,
+        )
+        e.add_field(
+            name="📢 Admin",
+            value="`/announce` – Post announcements\n`/debug` – Show config\n`/ids` – Show IDs",
+            inline=False,
+        )
+        e.add_field(
+            name="🎉 Engagement",
+            value="`/poll` `/raid_new` `/raid_status` `/raid_ping` `/raid_end`\nMore features coming soon (leveling, trivia, QOTD).",
+            inline=False,
+        )
+        e.set_footer(text="Powered by $PAL – Palaemon Emergency Services")
+        await interaction.response.send_message(embed=e, ephemeral=True)
 
-    # ---- Friendly app command error handling ----
-    @commands.Cog.listener()
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingPermissions):
-            return await interaction.response.send_message("You lack permissions for that.", ephemeral=True)
-        if isinstance(error, app_commands.CommandOnCooldown):
-            return await interaction.response.send_message("⏳ Easy there—try again shortly.", ephemeral=True)
-        try:
-            if interaction.response.is_done():
-                await interaction.followup.send("❌ Oops, something went wrong.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Oops, something went wrong.", ephemeral=True)
-        except Exception:
-            pass  # keep calm
-
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
