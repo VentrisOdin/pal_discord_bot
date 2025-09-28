@@ -62,7 +62,7 @@ def _load_level_roles_from_env() -> Dict[int, str]:
                     mapping[lvl] = name
             except Exception:
                 continue
-    return mapping
+    return dict(sorted(mapping.items(), key=lambda kv: kv[0]))
 
 LEVEL_ROLE_NAMES = _load_level_roles_from_env()
 
@@ -78,40 +78,29 @@ def xp_needed_for_level(level: int) -> int:
         return int(LEVEL_BASE)
     return int(round(LEVEL_BASE * (level ** LEVEL_EXP)))
 
-def total_xp_to_reach(level: int) -> int:
-    """Total cumulative XP required to *reach* a given level (i.e., level up from 0)."""
-    if level <= 1:
-        return 0
-    # Sum from 2..level of xp_needed_for_level(i)
-    total = 0
-    for l in range(2, level + 1):
-        total += xp_needed_for_level(l)
-    return total
-
 def level_from_xp(xp: int, max_level: int = 200) -> int:
-    """Invert XP -> level using incremental search (safe and simple for modest max levels)."""
+    """Invert XP -> level using incremental search."""
     if xp <= 0:
         return 1
     lvl = 1
     while lvl < max_level:
-        nxt_need = xp_needed_for_level(lvl + 1)
-        if xp < nxt_need:
+        need = xp_needed_for_level(lvl + 1)
+        if xp < need:
             break
-        xp -= nxt_need
+        xp -= need
         lvl += 1
     return max(1, lvl)
 
 def progress_to_next(xp_total: int) -> Tuple[int, int, int]:
     """
     Returns (level, xp_in_level, xp_required_for_next).
-    xp_total is the member's *total* accumulated XP (not per-level remainder).
+    xp_total is the member's total accumulated XP.
     """
     lvl = 1
     rem = xp_total
     while True:
         need = xp_needed_for_level(lvl + 1)
         if rem < need:
-            # currently at lvl; rem is progress in this level
             return lvl, rem, need
         rem -= need
         lvl += 1
@@ -132,28 +121,22 @@ class Leveling(commands.Cog):
     # ---------- DB ----------
     async def _db(self):
         db = await aiosqlite.connect(DB_PATH)
-        # base table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS leveling (
                 guild_id  INTEGER NOT NULL,
                 user_id   INTEGER NOT NULL,
                 xp        INTEGER NOT NULL DEFAULT 0,
                 last_ts   INTEGER NOT NULL DEFAULT 0,
-                -- added columns for daily bonus & streaks (if missing, we'll add)
                 last_daily_ts INTEGER NOT NULL DEFAULT 0,
                 streak_count   INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (guild_id, user_id)
             )
         """)
-        # attempt to add columns if an older schema exists
-        try:
-            await db.execute("ALTER TABLE leveling ADD COLUMN last_daily_ts INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE leveling ADD COLUMN streak_count INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
+        # add columns if older schema
+        try: await db.execute("ALTER TABLE leveling ADD COLUMN last_daily_ts INTEGER NOT NULL DEFAULT 0")
+        except Exception: pass
+        try: await db.execute("ALTER TABLE leveling ADD COLUMN streak_count INTEGER NOT NULL DEFAULT 0")
+        except Exception: pass
         await db.commit()
         return db
 
@@ -197,22 +180,15 @@ class Leveling(commands.Cog):
         return new_total, new_level, leveled
 
     async def _grant_daily(self, guild: discord.Guild, member: discord.Member) -> Tuple[int, int, int]:
-        """
-        Returns (granted_xp, new_total_xp, new_streak).
-        """
         gid, uid = guild.id, member.id
         xp, last_ts, last_daily_ts, streak = await self._get_stats(gid, uid)
-
-        # Determine UTC day numbers
         now = int(time.time())
         today = now // 86400
         last_day = last_daily_ts // 86400 if last_daily_ts else -1
 
         if last_day == today:
-            # already claimed today
             return 0, xp, streak
 
-        # streak logic
         if last_day == today - 1:
             streak = min(STREAK_MAX, streak + 1)
         else:
@@ -221,13 +197,11 @@ class Leveling(commands.Cog):
         bonus = int(round(DAILY_BONUS_BASE * (1.0 + streak * STREAK_PCT)))
         new_total = xp + bonus
         await self._write_stats(gid, uid, new_total, last_ts, now, streak)
-
         return bonus, new_total, streak
 
     async def _maybe_award_role(self, member: discord.Member, new_level: int):
         if not LEVEL_ROLE_NAMES:
             return
-
         eligible: List[int] = [lvl for lvl in LEVEL_ROLE_NAMES.keys() if new_level >= lvl]
         if not eligible:
             return
@@ -281,27 +255,23 @@ class Leveling(commands.Cog):
             pass
 
     # ---------- Listeners ----------
-    @commands.Cog.listener()
+    @commands.Cog.listener())
     async def on_message(self, message: discord.Message):
         if not message.guild or message.author.bot:
             return
-
         member = message.author
         gid, uid = message.guild.id, member.id
 
-        # basic content/attachment check
         content = (message.content or "").strip()
         if len(content) < 3 and not message.attachments:
             return
 
-        # cooldown
         now = time.time()
         last = getattr(self, "_cooldown", {}).get((gid, uid), 0.0)
         if now - last < AWARD_COOLDOWN:
             return
         self._cooldown[(gid, uid)] = now
 
-        # random per-message xp × channel multiplier
         base = random.randint(AWARD_MIN, AWARD_MAX)
         mult = self._channel_multiplier(message.channel.id)
         delta = int(round(base * mult))
@@ -355,7 +325,6 @@ class Leveling(commands.Cog):
         e = discord.Embed(title="🏆 Leaderboard", description="\n".join(lines), color=discord.Color.gold())
         await interaction.response.send_message(embed=e)
 
-    # daily bonus with streaks
     @GUILD_DEC
     @app_commands.command(name="daily", description="Claim your daily XP bonus (streak increases your reward).")
     async def daily(self, interaction: discord.Interaction):
@@ -370,21 +339,17 @@ class Leveling(commands.Cog):
         msg = f"✅ Daily claimed: **+{bonus} XP** (streak: {streak}/{STREAK_MAX})."
         if lvl_after > lvl_before:
             msg += f" 🎉 You reached **Level {lvl_after}**!"
-            # optional: try reward roles here too
             await self._maybe_award_role(interaction.user, lvl_after)  # type: ignore
         await interaction.followup.send(msg, ephemeral=True)
 
-    # show curve info
     @GUILD_DEC
     @app_commands.command(name="level_curve", description="Show the XP curve parameters and next thresholds.")
     async def level_curve(self, interaction: discord.Interaction):
-        # show next 5 levels from your current point
         xp, _, _, _ = await self._get_stats(interaction.guild_id, interaction.user.id)
         lvl, xp_in, xp_req = progress_to_next(xp)
         upcoming = []
         cur_lvl = lvl
-        # compute next few level requirements (fresh from curve)
-        for i in range(5):
+        for _ in range(5):
             need = xp_needed_for_level(cur_lvl + 1)
             upcoming.append(f"→ L{cur_lvl+1}: needs {need} XP from current level")
             cur_lvl += 1
@@ -393,6 +358,35 @@ class Leveling(commands.Cog):
         e.add_field(name="Formula", value=f"xp_needed(level) = **{LEVEL_BASE:g} × level^{LEVEL_EXP:g}**", inline=False)
         e.add_field(name="Your Progress", value=f"Level **{lvl}** — `{xp_in}/{xp_req}` to next", inline=False)
         e.add_field(name="Upcoming", value="\n".join(upcoming), inline=False)
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+    # NEW: list ladder titles from env
+    @GUILD_DEC
+    @app_commands.command(name="titles", description="Show the XP rank ladder (LEVEL_ROLE_*).")
+    async def titles(self, interaction: discord.Interaction):
+        if not LEVEL_ROLE_NAMES:
+            return await interaction.response.send_message(
+                "No ladder configured. Add `LEVEL_ROLE_*` keys to `.env` (e.g., `LEVEL_ROLE_5=Medic`).",
+                ephemeral=True
+            )
+        lines = [f"**L{lvl}** — {name}" for lvl, name in LEVEL_ROLE_NAMES.items()]
+        e = discord.Embed(title="🎮 XP Rank Ladder", description="\n".join(lines), color=discord.Color.purple())
+        e.set_footer(text="Configure via LEVEL_ROLE_* in .env")
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+    # NEW: show active channel multipliers
+    @GUILD_DEC
+    @app_commands.command(name="boosts", description="Show active channel XP multipliers.")
+    async def boosts(self, interaction: discord.Interaction):
+        if not CHANNEL_BOOSTS:
+            return await interaction.response.send_message("No channel boosts configured.", ephemeral=True)
+        lines = []
+        for cid, mult in CHANNEL_BOOSTS.items():
+            ch = interaction.guild.get_channel(cid)
+            label = ch.mention if isinstance(ch, discord.TextChannel) else f"`#{cid}`"
+            lines.append(f"{label} — x{mult:g}")
+        e = discord.Embed(title="⚡ Channel XP Boosts", description="\n".join(lines), color=discord.Color.brand_green())
+        e.set_footer(text="Configure via LEVEL_CHANNEL_BOOSTS in .env")
         await interaction.response.send_message(embed=e, ephemeral=True)
 
     # Admin test: grant XP
