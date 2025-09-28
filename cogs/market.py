@@ -1,212 +1,203 @@
 # cogs/market.py
 import os
-import re
-import math
 import aiohttp
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
 
-ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
-
-DEX_TOKENS = "https://api.dexscreener.com/latest/dex/tokens"
-DEX_SEARCH = "https://api.dexscreener.com/latest/dex/search"
-
-# Optional fast guild scope
 _GUILD_ID_RAW = os.getenv("GUILD_ID") or ""
 GUILD_ID = int(_GUILD_ID_RAW) if _GUILD_ID_RAW.isdigit() else None
 GUILD_DEC = app_commands.guilds(GUILD_ID) if GUILD_ID else (lambda f: f)
 
-def fmt_num(x) -> str:
-    try:
-        x = float(x)
-    except Exception:
-        return "—"
-    if math.isnan(x) or math.isinf(x):
-        return "—"
-    if x >= 1_000_000_000:
-        return f"{x/1_000_000_000:.2f}B"
-    if x >= 1_000_000:
-        return f"{x/1_000_000:.2f}M"
-    if x >= 1_000:
-        return f"{x/1_000:.2f}K"
-    return f"{x:.6f}".rstrip("0").rstrip(".")
-
-def make_embed_for_pair(p: dict, title_hint: str | None = None) -> discord.Embed:
-    chain = (p.get("chainId") or "—").upper()
-    dex = p.get("dexId") or "—"
-    base_tok = (p.get("baseToken") or {}).get("symbol") or "—"
-    quote_tok = (p.get("quoteToken") or {}).get("symbol") or "—"
-    price_usd = p.get("priceUsd")
-    price_native = p.get("priceNative")
-    liq = (p.get("liquidity") or {}).get("usd")
-    vol24 = (p.get("volume") or {}).get("h24")
-    fdv = p.get("fdv")
-    url = p.get("url")
-    pair_addr = p.get("pairAddress")
-
-    title = title_hint or f"{base_tok}/{quote_tok}"
-    e = discord.Embed(
-        title=f"💱 {title}",
-        description=f"Chain **{chain}** • DEX **{dex}**",
-        color=discord.Color.blurple()
-    )
-    e.add_field(name="Price (USD)", value=f"${fmt_num(price_usd)}", inline=True)
-    if quote_tok and price_native:
-        e.add_field(name=f"Price ({quote_tok})", value=fmt_num(price_native), inline=True)
-    e.add_field(name="Liquidity", value=f"${fmt_num(liq)}", inline=True)
-    e.add_field(name="24h Volume", value=f"${fmt_num(vol24)}", inline=True)
-    if isinstance(fdv, (int, float)):
-        e.add_field(name="FDV", value=f"${fmt_num(fdv)}", inline=True)
-    if pair_addr:
-        e.add_field(name="Pair", value=f"`{pair_addr}`", inline=False)
-    if url:
-        e.url = url
-    e.set_footer(text="Data: DexScreener")
-    return e
+PAL_TOKEN = os.getenv("PAL_TOKEN_ADDRESS", "0xad20315b89E89E900FB21d7Ea158079c1A764a59")
+PAL_PAIR = os.getenv("PAL_PAIR_ADDRESS", "0x239eB1236AF3A9b76fce9E8efa9b17C15eBD6a9E")
+CHAIN = os.getenv("DEXSCREENER_CHAIN", "bsc")
 
 class Market(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
-        self._cache: dict[str, tuple[float, dict]] = {}  # key -> (exp_ts, data)
 
-    # -------- tiny cache (45s) --------
-    def _cache_get(self, key: str):
-        import time
-        v = self._cache.get(key)
-        if not v:
-            return None
-        exp, data = v
-        return data if exp > time.time() else None
-
-    def _cache_set(self, key: str, data: dict, ttl: int = 45):
-        import time
-        self._cache[key] = (time.time() + ttl, data)
-
-    async def _get_json(self, session: aiohttp.ClientSession, url: str):
-        cached = self._cache_get(f"GET:{url}")
-        if cached is not None:
-            return cached
-        async with session.get(url, timeout=20) as r:
-            r.raise_for_status()
-            data = await r.json()
-            self._cache_set(f"GET:{url}", data)
-            return data
-
-    # -------- helpers --------
-    def _filter_chain(self, pairs: list[dict]) -> list[dict]:
-        target = (os.getenv("DEXSCREENER_CHAIN") or "").lower().strip()
-        if not target:
-            return pairs
-        filtered = [p for p in pairs if (p.get("chainId") or "").lower() == target]
-        return filtered or pairs  # fallback to all if none match
-
-    def _best_pair(self, pairs: list[dict]) -> dict | None:
-        if not pairs:
-            return None
-        def liq_usd(p):
-            try:
-                return float((p.get("liquidity") or {}).get("usd") or 0)
-            except Exception:
-                return 0.0
-        return max(pairs, key=liq_usd)
-
-    # -------- /price --------
-    @GUILD_DEC
-    @app_commands.command(name="price", description="Token price from DexScreener.")
-    @app_commands.describe(query="0x address or search text (defaults to PAL).")
-    @app_commands.checks.cooldown(1, 3.0)
-    async def price(self, interaction: discord.Interaction, query: str | None = None):
-        await interaction.response.defer(thinking=True)
-        pal_addr = (os.getenv("PAL_TOKEN_ADDRESS") or "").strip()
-        query = (query or pal_addr).strip()
-
-        if not query:
-            return await interaction.followup.send(
-                "Provide a token **address** (0x…) or a search term, "
-                "or set `PAL_TOKEN_ADDRESS` in `.env`.", ephemeral=True
-            )
-
+    async def get_pal_price_pancakeswap(self):
+        """Try PancakeSwap API for PAL price"""
         try:
-            async with aiohttp.ClientSession() as s:
-                if ADDRESS_RE.match(query):
-                    data = await self._get_json(s, f"{DEX_TOKENS}/{query}")
-                    pairs = data.get("pairs") or []
-                    title_hint = f"{query[:6]}…{query[-4:]}"
-                else:
-                    data = await self._get_json(s, f"{DEX_SEARCH}?q={query}")
-                    # API returns "pairs" (modern) or "results" (legacy); normalize & filter dicts
-                    pairs = data.get("pairs") or data.get("results") or []
-                    pairs = [p for p in pairs if isinstance(p, dict)]
+            url = f"https://api.pancakeswap.info/api/v2/tokens/{PAL_TOKEN}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    print(f"PancakeSwap API status: {response.status}")
+                    if response.status == 200:
+                        data = await response.json()
+                        print(f"PancakeSwap data: {data}")
+                        price = data.get("data", {}).get("price")
+                        if price:
+                            return {
+                                "price": price,
+                                "source": "PancakeSwap"
+                            }
+        except Exception as e:
+            print(f"PancakeSwap API error: {e}")
+        return None
 
-                if not pairs:
-                    # Helpful guidance instead of a dead end
-                    tip = (
-                        "No pairs found. Try:\n"
-                        "• Paste the **contract address** (0x…)\n"
-                        "• Use `/price_debug` to inspect candidates\n"
-                        "• Check your `DEXSCREENER_CHAIN` in `.env`"
-                    )
-                    return await interaction.followup.send(tip, ephemeral=True)
+    async def get_pal_price_dexscreener(self, query: str):
+        """Try DexScreener API"""
+        try:
+            # Try search first
+            url = f"https://api.dexscreener.com/latest/dex/search/?q={query}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    print(f"DexScreener API status: {response.status}")
+                    if response.status == 200:
+                        data = await response.json()
+                        pairs = data.get("pairs", [])
+                        print(f"DexScreener found {len(pairs)} pairs")
+                        
+                        # Filter for BSC PAL tokens
+                        for pair in pairs:
+                            if (pair.get("chainId") == "bsc" and 
+                                pair.get("baseToken", {}).get("address", "").lower() == PAL_TOKEN.lower()):
+                                return {
+                                    "price": pair.get("priceUsd"),
+                                    "source": "DexScreener",
+                                    "pair": pair
+                                }
+        except Exception as e:
+            print(f"DexScreener API error: {e}")
+        return None
 
-                pairs = self._filter_chain(pairs)
-                best = self._best_pair(pairs)
-                if not best:
-                    return await interaction.followup.send("No liquid pairs after filtering.", ephemeral=True)
-
-                title_hint = title_hint if ADDRESS_RE.match(query) else (
-                    f"{(best.get('baseToken') or {}).get('symbol','?')}/{(best.get('quoteToken') or {}).get('symbol','?')}"
+    @GUILD_DEC
+    @app_commands.command(name="price", description="Get token price")
+    @app_commands.describe(token="Token symbol (PAL) or contract address")
+    async def price(self, interaction: discord.Interaction, token: str = "PAL"):
+        await interaction.response.defer()
+        
+        # Special handling for PAL
+        if token.upper() == "PAL" or token.lower() == PAL_TOKEN.lower():
+            # Try both APIs
+            ds_result = await self.get_pal_price_dexscreener("PAL")
+            ps_result = await self.get_pal_price_pancakeswap()
+            
+            # If we got a price from either source
+            if ds_result and ds_result.get("price"):
+                price = ds_result["price"]
+                source = "DexScreener"
+            elif ps_result and ps_result.get("price"):
+                price = ps_result["price"]
+                source = "PancakeSwap"
+            else:
+                # No price found, show helpful message
+                embed = discord.Embed(
+                    title="💰 PAL Price",
+                    description="**Price data temporarily unavailable from APIs**\n\n" +
+                               "PAL is actively trading but not accessible via price APIs right now.",
+                    color=discord.Color.orange()
                 )
-                embed = make_embed_for_pair(best, title_hint=title_hint)
-                await interaction.followup.send(embed=embed)
-
-        except app_commands.CommandOnCooldown:
-            raise
-        except Exception as e:
-            await interaction.followup.send(f"Error fetching price: {e}", ephemeral=True)
-
-    # -------- /price_debug --------
-    @GUILD_DEC
-    @app_commands.command(name="price_debug", description="Show candidate pairs (ephemeral).")
-    @app_commands.describe(query="0x address or search text (defaults to PAL).")
-    async def price_debug(self, interaction: discord.Interaction, query: str | None = None):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        pal_addr = (os.getenv("PAL_TOKEN_ADDRESS") or "").strip()
-        query = (query or pal_addr).strip()
-        if not query:
-            return await interaction.followup.send("Need an address or search term.", ephemeral=True)
-
-        try:
-            async with aiohttp.ClientSession() as s:
-                if ADDRESS_RE.match(query):
-                    data = await self._get_json(s, f"{DEX_TOKENS}/{query}")
-                    pairs = data.get("pairs") or []
+                embed.add_field(
+                    name="📊 View Live Price", 
+                    value=f"[DexScreener Chart](https://dexscreener.com/bsc/{PAL_PAIR})",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🔄 Alternative",
+                    value="Try `/price WBNB` to test if price feeds are working",
+                    inline=False
+                )
+                embed.set_footer(text="This is a known issue with low-volume tokens on DexScreener API")
+                return await interaction.followup.send(embed=embed)
+            
+            # Format price
+            try:
+                price_float = float(price)
+                if price_float < 0.01:
+                    price_text = f"${price_float:.8f}"
                 else:
-                    data = await self._get_json(s, f"{DEX_SEARCH}?q={query}")
-                    pairs = data.get("pairs") or data.get("results") or []
-                    pairs = [p for p in pairs if isinstance(p, dict)]
+                    price_text = f"${price_float:.4f}"
+            except:
+                price_text = f"${price}"
+            
+            embed = discord.Embed(
+                title="💰 PAL Price",
+                description=f"**{price_text}**",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="📊 Chart",
+                value=f"[View on DexScreener](https://dexscreener.com/bsc/{PAL_PAIR})",
+                inline=True
+            )
+            embed.set_footer(text=f"Source: {source}")
+            
+        else:
+            # Handle other tokens
+            result = await self.get_pal_price_dexscreener(token)
+            if not result or not result.get("price"):
+                embed = discord.Embed(
+                    title="❌ Token Not Found",
+                    description=f"No price data found for `{token}`\n\n" +
+                               "**Try:**\n" +
+                               "• Full contract address (0x...)\n" +
+                               "• Different token symbol\n" +
+                               "• `/price PAL` for our main token",
+                    color=discord.Color.red()
+                )
+                return await interaction.followup.send(embed=embed)
+            
+            price = result["price"]
+            try:
+                price_float = float(price)
+                if price_float < 0.01:
+                    price_text = f"${price_float:.8f}"
+                else:
+                    price_text = f"${price_float:.4f}"
+            except:
+                price_text = f"${price}"
+            
+            embed = discord.Embed(
+                title=f"💰 {token.upper()} Price",
+                description=f"**{price_text}**",
+                color=discord.Color.green()
+            )
+            embed.set_footer(text="Source: DexScreener")
+        
+        await interaction.followup.send(embed=embed)
 
-            if not pairs:
-                return await interaction.followup.send("No pairs returned by DexScreener.", ephemeral=True)
+    @GUILD_DEC  
+    @app_commands.command(name="price_debug", description="Debug token price lookup")
+    @app_commands.describe(token="Token to debug")
+    async def price_debug(self, interaction: discord.Interaction, token: str = "PAL"):
+        await interaction.response.defer()
+        
+        embed = discord.Embed(title=f"🔍 Debug: {token}", color=discord.Color.blue())
+        embed.add_field(name="PAL Token Address", value=PAL_TOKEN, inline=False)
+        embed.add_field(name="PAL Pair Address", value=PAL_PAIR, inline=False)
+        embed.add_field(name="Chain", value=CHAIN, inline=False)
+        
+        # Test both APIs for PAL
+        if token.upper() == "PAL":
+            ds_result = await self.get_pal_price_dexscreener(token)
+            ps_result = await self.get_pal_price_pancakeswap()
+            
+            embed.add_field(
+                name="DexScreener API", 
+                value="✅ Found" if ds_result else "❌ No data",
+                inline=True
+            )
+            embed.add_field(
+                name="PancakeSwap API", 
+                value="✅ Found" if ps_result else "❌ No data",
+                inline=True
+            )
+        
+        embed.add_field(
+            name="📊 Manual Check", 
+            value=f"[DexScreener Website](https://dexscreener.com/bsc/{PAL_PAIR})",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tip",
+            value="Low volume tokens often don't appear in APIs even when trading",
+            inline=False
+        )
+        
+        await interaction.followup.send(embed=embed)
 
-            pairs = self._filter_chain(pairs)
-
-            # show up to 12 candidates
-            lines = []
-            for p in pairs[:12]:
-                chain = p.get("chainId", "—")
-                dex = p.get("dexId", "—")
-                base = (p.get("baseToken") or {}).get("symbol", "—")
-                quote = (p.get("quoteToken") or {}).get("symbol", "—")
-                pair_addr = p.get("pairAddress", "—")
-                liq = (p.get("liquidity") or {}).get("usd")
-                lines.append(f"- {chain}/{dex}: **{base}/{quote}** — `{pair_addr}` — Liq ${fmt_num(liq)}")
-
-            txt = "Candidates (filtered):\n" + "\n".join(lines)
-            await interaction.followup.send(txt, ephemeral=True)
-
-        except Exception as e:
-            await interaction.followup.send(f"Error: {e}", ephemeral=True)
-
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(Market(bot))
