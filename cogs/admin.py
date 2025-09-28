@@ -4,6 +4,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+# Add guild scoping
+_GUILD_ID_RAW = os.getenv("GUILD_ID") or ""
+GUILD_ID = int(_GUILD_ID_RAW) if _GUILD_ID_RAW.isdigit() else None
+GUILD_DEC = app_commands.guilds(GUILD_ID) if GUILD_ID else (lambda f: f)
+
 def make_embed(title: str, desc: str, color=discord.Color.blurple()):
     return discord.Embed(title=title, description=desc, color=color)
 
@@ -12,6 +17,7 @@ class Admin(commands.Cog):
         self.bot = bot
 
     # ---------- Announce ----------
+    @GUILD_DEC  # Add this decorator
     @app_commands.command(description="Post an announcement in the current channel (Manage Server only).")
     @app_commands.describe(message="Your announcement text")
     async def announce(self, interaction: discord.Interaction, message: str):
@@ -24,6 +30,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message("✅ Announcement posted.", ephemeral=True)
 
     # ---------- Debug ----------
+    @GUILD_DEC  # Add this decorator
     @app_commands.command(description="Show live bot config values (ephemeral).")
     async def debug(self, interaction: discord.Interaction):
         fields = [
@@ -44,6 +51,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message(embed=e, ephemeral=True)
 
     # ---------- IDs ----------
+    @GUILD_DEC  # Add this decorator
     @app_commands.command(description="Show current server and channel IDs (ephemeral).")
     async def ids(self, interaction: discord.Interaction):
         guild_id = interaction.guild_id or "—"
@@ -54,6 +62,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message(embed=e, ephemeral=True)
 
     # ---------- Help ----------
+    @GUILD_DEC  # Add this decorator
     @app_commands.command(description="Show bot help categories.")
     async def help(self, interaction: discord.Interaction):
         e = discord.Embed(

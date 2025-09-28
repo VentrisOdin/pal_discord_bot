@@ -4,6 +4,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+_GUILD_ID_RAW = os.getenv("GUILD_ID") or ""
+GUILD_ID = int(_GUILD_ID_RAW) if _GUILD_ID_RAW.isdigit() else None
+GUILD_DEC = app_commands.guilds(GUILD_ID) if GUILD_ID else (lambda f: f)
+
 PUBLIC_MD = os.getenv("PUBLIC_GUIDE_PATH", "bot_guide_public.md")
 ADMIN_MD  = os.getenv("ADMIN_GUIDE_PATH",  "bot_guide_admin.md")
 
@@ -16,6 +20,7 @@ class Guide(commands.Cog):
         self.bot = bot
 
     # ---------- PUBLIC GUIDE ----------
+    @GUILD_DEC
     @app_commands.command(name="guide", description="How to use the Palaemon Bot (public quick-start).")
     async def guide(self, inter: discord.Interaction):
         embed = discord.Embed(
@@ -30,7 +35,7 @@ class Guide(commands.Cog):
                 "• `/profile` — view your XP level & verified roles\n"
                 "• `/daily` — claim daily XP bonus\n"
                 "• `/raid_new` — start a social push (if enabled)\n"
-                "• `/help` — full command index"
+                "• `/bot_help` — full command index"
             ),
             color=discord.Color.green()
         )
@@ -50,6 +55,7 @@ class Guide(commands.Cog):
             await inter.followup.send("⚠️ I couldn’t DM you (your DMs might be disabled).", ephemeral=True)
 
     # ---------- ADMIN GUIDE ----------
+    @GUILD_DEC
     @app_commands.command(name="admin_guide", description="(Staff) Admin quick-start + full manual.")
     async def admin_guide(self, inter: discord.Interaction):
         if not has_manage_server(inter):

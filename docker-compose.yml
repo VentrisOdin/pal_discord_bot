@@ -1,0 +1,21 @@
+services:
+  pal-discord-bot:
+    build: .
+    container_name: pal-discord-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - DB_PATH=/app/data/pal_bot.sqlite
+    networks:
+      - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bot-network:
+    driver: bridge

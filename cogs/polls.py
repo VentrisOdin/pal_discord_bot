@@ -71,3 +71,6 @@ class Polls(commands.Cog):
 
         res = discord.Embed(title=f"📊 Results — {e.title.replace('📊','').strip()}", description="\n".join(lines))
         await msg.reply(embed=res)
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Polls(bot))

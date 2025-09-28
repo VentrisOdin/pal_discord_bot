@@ -57,11 +57,16 @@ async def on_app_command_error(inter: discord.Interaction, error: app_commands.A
         logging.exception("Error while handling app command error")
 
 # ---------- Utility: ensure channels exist ----------
-async def ensure_text_channel(guild: discord.Guild, desired_id: int, default_name: str, topic: str | None = None) -> int:
+async def ensure_text_channel(
+    guild: discord.Guild,
+    desired_id: int,
+    default_name: str,
+    topic: str | None = None
+) -> int:
     """
     Returns the channel ID (existing or newly-created).
-    If desired_id is set but not found, creates a new channel with default_name.
-    If desired_id is 0, tries to find by name; if missing, creates.
+    If desired_id is set but not found, tries name; if missing, creates it.
+    For 'verification-review', we create it locked-down by default.
     """
     # 1) If ID points to an existing channel, use it
     if desired_id:
@@ -77,14 +82,36 @@ async def ensure_text_channel(guild: discord.Guild, desired_id: int, default_nam
 
     # 3) Create
     try:
-        overwrites = None  # keep default perms
-        ch = await guild.create_text_channel(name=default_name, overwrites=overwrites, topic=topic or "")
+        # Lock down verification-review by default
+        if default_name.lower() in {"verification-review", "verify_review", "verify-review"}:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            }
+            # If you have a "Moderator" role, allow it too
+            mod_role = discord.utils.get(guild.roles, name="Moderator")
+            if mod_role:
+                overwrites[mod_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+            ch = await guild.create_text_channel(
+                name=default_name,
+                topic=(topic or ""),
+                overwrites=overwrites
+            )
+        else:
+            # IMPORTANT: do NOT pass overwrites=None (omit the arg entirely)
+            ch = await guild.create_text_channel(
+                name=default_name,
+                topic=(topic or "")
+            )
+
         logging.info("Created channel #%s (ID %s). Add this to .env.", ch.name, ch.id)
         return ch.id
     except discord.Forbidden:
         logging.error("I lack permissions to create #%s. Give me Manage Channels.", default_name)
     except Exception as e:
         logging.exception("Failed to create #%s: %s", default_name, e)
+
     return 0
 
 async def ensure_core_channels(guild: discord.Guild):
