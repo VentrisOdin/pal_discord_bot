@@ -8,6 +8,14 @@ from discord.ext import commands
 # You can edit this list or drive some via env if you like.
 CORE_ROLES = [
     {"name": os.getenv("ALERT_ROLE_NAME", "Disaster Alerts"), "mentionable": True},
+    {"name": os.getenv("RAID_ROLE_NAME", "Raiders"), "mentionable": True},
+
+    # Verified professions (feel free to toggle mentionable)
+    {"name": "Paramedic (Verified)", "mentionable": False},
+    {"name": "Doctor (Verified)", "mentionable": False},
+    {"name": "Nurse (Verified)", "mentionable": False},
+    {"name": "EMT (Verified)", "mentionable": False},
+    {"name": "Disaster Relief Pro", "mentionable": False},
     # Optional examples for future leveling rewards; comment out if not needed:
     # {"name": "Medic (Lvl 5)", "mentionable": False},
     # {"name": "Commander (Lvl 10)", "mentionable": False},
