@@ -4,22 +4,34 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+def _level_roles_from_env():
+    names = []
+    for k, v in os.environ.items():
+        if k.startswith("LEVEL_ROLE_") and v.strip():
+            names.append(v.strip())
+    # de-dup while preserving order
+    seen = set(); ordered = []
+    for n in names:
+        if n not in seen:
+            ordered.append(n); seen.add(n)
+    return ordered
+
 # Core roles we want to exist.
 # You can edit this list or drive some via env if you like.
 CORE_ROLES = [
     {"name": os.getenv("ALERT_ROLE_NAME", "Disaster Alerts"), "mentionable": True},
     {"name": os.getenv("RAID_ROLE_NAME", "Raiders"), "mentionable": True},
 
-    # Verified professions (feel free to toggle mentionable)
+    # Verified professions
     {"name": "Paramedic (Verified)", "mentionable": False},
     {"name": "Doctor (Verified)", "mentionable": False},
     {"name": "Nurse (Verified)", "mentionable": False},
     {"name": "EMT (Verified)", "mentionable": False},
     {"name": "Disaster Relief Pro", "mentionable": False},
-    # Optional examples for future leveling rewards; comment out if not needed:
-    # {"name": "Medic (Lvl 5)", "mentionable": False},
-    # {"name": "Commander (Lvl 10)", "mentionable": False},
 ]
+
+# >>> add this line to append XP rank roles discovered from env
+CORE_ROLES += [{"name": n, "mentionable": False} for n in _level_roles_from_env()]
 
 _GUILD_ID_RAW = os.getenv("GUILD_ID") or ""
 GUILD_ID = int(_GUILD_ID_RAW) if _GUILD_ID_RAW.isdigit() else None
