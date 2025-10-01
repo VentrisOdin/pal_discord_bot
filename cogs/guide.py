@@ -15,6 +15,122 @@ def has_manage_server(inter: discord.Interaction) -> bool:
     perms = inter.user.guild_permissions
     return perms.manage_guild or perms.administrator
 
+def get_recruitment_guide() -> str:
+    """Get recruitment system guide content"""
+    return """
+## 🎯 **RECRUITMENT & REFERRAL SYSTEM**
+
+**Grow the community and get rewarded!**
+
+### 📊 **How It Works**
+When someone joins using your invite link, you automatically earn:
+• **+100 XP** per successful invite
+• **Bonus XP** when reaching rank milestones
+• **Recognition** in welcome messages
+• **Progression** through recruiter ranks
+
+### 🏆 **Recruiter Ranks**
+Progress through these epic ranks:
+
+👤 **Newcomer** (0 recruits)
+*Just getting started*
+
+🌱 **Scout** (1+ recruits)  
+*First successful invite*
+
+🎯 **Recruiter** (5+ recruits)
+*Building momentum* • +50 Bonus XP
+
+🔥 **Headhunter** (10+ recruits)
+*Serious talent acquisition* • +50 Bonus XP
+
+⭐ **Talent Magnet** (25+ recruits)
+*Community growth champion* • +50 Bonus XP
+
+👑 **Legion Builder** (50+ recruits)
+*Elite recruiter status* • +50 Bonus XP
+
+🌟 **Palaemon Ambassador** (100+ recruits)
+*Legendary community builder* • +50 Bonus XP
+**💰 100,000 PAL TOKEN REWARD! 💰**
+
+### 🔗 **Creating Invite Links**
+
+**Method 1: Discord Interface**
+1. Right-click your server name
+2. Click "Invite People"
+3. Customize settings and copy link
+4. Share anywhere to get credit!
+
+**Method 2: Bot Command**
+Use `/create_invite` for tracked invites:
+```
+/create_invite max_uses:10 max_age:24
+```
+• `max_uses` - How many people can use it (0 = unlimited)
+• `max_age` - Hours until it expires (0 = never)
+
+### 📋 **Commands**
+
+**User Commands:**
+• `/recruiter_stats [user]` - View recruitment achievements
+• `/recruiter_leaderboard` - Top 10 recruiters  
+• `/top_recruiters` - Hall of Fame (Top 25)
+• `/recruiting_stats` - Server statistics
+• `/create_invite` - Generate tracked invite links
+
+**Admin Commands:**
+• `/pal_rewards_pending` - View pending PAL rewards
+• `/pal_rewards_mark_distributed` - Mark rewards as sent
+
+### 🏆 **Hall of Fame Features**
+
+**Top 25 Leaderboard:**
+• **Legendary Tier** (Top 5) - The community emperors
+• **Champion Tier** (6-15) - Elite recruiters  
+• **Hero Tier** (16-25) - Rising stars
+
+**Special Titles:**
+• 🥇 **#1 = "THE EMPEROR"** - Ultimate community leader
+• 🥈 **#2 = "THE GENERAL"** - Master strategist
+• 🥉 **#3 = "THE CAPTAIN"** - Elite commander
+
+### 💰 **PAL Token Rewards**
+
+**100,000 PAL** for reaching **🌟 Palaemon Ambassador** (100+ recruits)
+
+**How it works:**
+1. Reach 100 successful recruits
+2. Automatic PAL reward logged in system
+3. Admin distributes tokens manually
+4. Epic server-wide announcement
+
+### 💡 **Pro Tips**
+
+**Maximize Your Recruiting:**
+• Share invites on **social media**
+• Post in **relevant Discord servers**
+• Include in your **Twitter/X bio**
+• Share with **friends interested in crypto**
+
+**Best Practices:**
+• **Welcome new members** personally
+• **Help them get started** with bot commands
+• **Explain server rules** and channels
+• **Be an awesome community ambassador**
+
+### 🚨 **Important Notes**
+
+• **No self-invites** - You can't invite yourself for XP
+• **Active tracking** - System monitors if invitees stay
+• **Fair play** - Quality recruiting encouraged over quantity
+• **Integration** - Works with existing XP/leveling system
+
+---
+
+*Ready to become a recruiting legend? Use `/create_invite` and start building the Palaemon empire!* 🚀
+"""
+
 class Guide(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -35,24 +151,26 @@ class Guide(commands.Cog):
                 "• `/profile` — view your XP level & verified roles\n"
                 "• `/daily` — claim daily XP bonus\n"
                 "• `/raid_new` — start a social push (if enabled)\n"
+                "• `/recruiter_stats` — view recruiting achievements\n"
+                "• `/platypus` — get a random Pal Platypus image!\n"
                 "• `/bot_help` — full command index"
             ),
             color=discord.Color.green()
         )
-        embed.set_footer(text="You’ll receive the full public manual via DM.")
+        embed.set_footer(text="You'll receive the full public manual via DM.")
         await inter.response.send_message(embed=embed, ephemeral=True)
 
         # DM the public manual file
         try:
             if os.path.exists(PUBLIC_MD):
                 await inter.user.send(
-                    content="📖 Here’s the **public user manual** for Palaemon Bot:",
+                    content="📖 Here's the **public user manual** for Palaemon Bot:",
                     file=discord.File(PUBLIC_MD)
                 )
             else:
                 await inter.user.send("ℹ️ Public manual file not found on the server.")
         except discord.Forbidden:
-            await inter.followup.send("⚠️ I couldn’t DM you (your DMs might be disabled).", ephemeral=True)
+            await inter.followup.send("⚠️ I couldn't DM you (your DMs might be disabled).", ephemeral=True)
 
     # ---------- ADMIN GUIDE ----------
     @GUILD_DEC
@@ -71,19 +189,20 @@ class Guide(commands.Cog):
                 "• `/settings_show` / `/settings_set` — live config\n"
                 "• `/verify_queue` `/verify_approve` `/verify_deny` — pro role workflow\n"
                 "• `/raid_new` `/raid_ping` `/raid_status` `/raid_done` — social pushes\n"
-                "• `/level_givexp` — give XP for events\n\n"
+                "• `/level_givexp` — give XP for events\n"
+                "• `/pal_rewards_pending` — check pending PAL rewards\n\n"
                 "**Safety:** give the bot `Manage Channels` + `Manage Roles`; keep bot role above reward/verified roles."
             ),
             color=discord.Color.blurple()
         )
-        embed.set_footer(text="You’ll receive the full admin manual via DM.")
+        embed.set_footer(text="You'll receive the full admin manual via DM.")
         await inter.response.send_message(embed=embed, ephemeral=True)
 
         # DM the full admin manual file
         try:
             if os.path.exists(ADMIN_MD):
                 await inter.user.send(
-                    content="📕 Here’s the **admin manual** (full instructions):",
+                    content="📕 Here's the **admin manual** (full instructions):",
                     file=discord.File(ADMIN_MD)
                 )
             else:
@@ -96,173 +215,52 @@ class Guide(commands.Cog):
                 else:
                     await inter.user.send("⚠️ No manual files found on the server.")
         except discord.Forbidden:
-            await inter.followup.send("⚠️ I couldn’t DM you the admin manual (your DMs might be disabled).", ephemeral=True)
+            await inter.followup.send("⚠️ I couldn't DM you the admin manual (your DMs might be disabled).", ephemeral=True)
 
     # ---------- RECRUITMENT GUIDE ----------
     @GUILD_DEC
-    @app_commands.command(name="recruitment_guide", description="Guide to the recruitment system.")
+    @app_commands.command(name="recruitment_guide", description="📖 Complete guide to the recruitment system")
     async def recruitment_guide(self, inter: discord.Interaction):
         embed = discord.Embed(
-            title="🎯 **RECRUITMENT SYSTEM** 🎯",
-            description=(
-                "**Grow the community and get rewarded!**\n\n"
-                "### 📊 **How It Works**\n"
-                "When someone joins using your invite link, you automatically earn:\n"
-                "• **+100 XP** per successful invite\n"
-                "• **Bonus XP** when reaching rank milestones\n"
-                "• **Recognition** in welcome messages\n"
-                "• **Progression** through recruiter ranks\n\n"
-                "### 🏆 **Recruiter Ranks**\n"
-                "Progress through these epic ranks:\n\n"
-                "👤 **Newcomer** (0 recruits) - *Just getting started*\n\n"
-                "🌱 **Scout** (1+ recruits)  - *First successful invite*\n\n"
-                "🎯 **Recruiter** (5+ recruits) - *Building momentum* • +50 Bonus XP\n\n"
-                "🔥 **Headhunter** (10+ recruits) - *Serious talent acquisition* • +50 Bonus XP\n\n"
-                "⭐ **Talent Magnet** (25+ recruits) - *Community growth champion* • +50 Bonus XP\n\n"
-                "👑 **Legion Builder** (50+ recruits) - *Elite recruiter status* • +50 Bonus XP\n\n"
-                "🌟 **Palaemon Ambassador** (100+ recruits) - *Legendary community builder* • +50 Bonus XP\n\n"
-                "### 🔗 **Creating Invite Links**\n\n"
-                "**Method 1: Discord Interface**\n"
-                "1. Right-click your server name\n"
-                "2. Click \"Invite People\"\n"
-                "3. Customize settings and copy link\n"
-                "4. Share anywhere to get credit!\n\n"
-                "**Method 2: Bot Command**\n"
-                "Use `/create_invite` for tracked invites:\n"
-                "```\n"
-                "/create_invite max_uses:10 max_age:24\n"
-                "```\n"
-                "• `max_uses` - How many people can use it (0 = unlimited)\n"
-                "• `max_age` - Hours until it expires (0 = never)\n\n"
-                "### 📋 **Commands**\n\n"
-                "**`/recruiter_stats [user]`**\n"
-                "• View recruitment achievements\n"
-                "• See current rank and progress\n"
-                "• Check recent successful invites\n"
-                "• Track XP earned from recruiting\n\n"
-                "**`/recruiter_leaderboard`**\n"
-                "• Top 10 recruiters in the server\n"
-                "• See who's building the community\n"
-                "• Competitive rankings with medals\n\n"
-                "**`/create_invite`**\n"
-                "• Generate tracked invite links\n"
-                "• Customize expiration and usage limits\n"
-                "• Get guaranteed credit for invites\n\n"
-                "### 🎉 **Rewards & Recognition**\n\n"
-                "**Immediate Rewards:**\n"
-                "• **100 XP** per successful invite\n"
-                "• **Welcome message** credits you publicly\n"
-                "• **Rank progression** tracked automatically\n\n"
-                "**Milestone Bonuses:**\n"
-                "• **+50 XP** each time you reach a new rank\n"
-                "• **Special recognition** in celebration messages\n"
-                "• **Visual rank badges** in your stats\n\n"
-                "**Community Impact:**\n"
-                "• **Build the Palaemon community**\n"
-                "• **Help new members feel welcome**\n"
-                "• **Earn respect as a community leader**\n\n"
-                "### 💡 **Pro Tips**\n\n"
-                "**Maximize Your Recruiting:**\n"
-                "• Share invites on **social media**\n"
-                "• Post in **relevant Discord servers**\n"
-                "• Include in your **Twitter/X bio**\n"
-                "• Share with **friends interested in crypto**\n\n"
-                "**Best Practices:**\n"
-                "• **Welcome new members** personally\n"
-                "• **Help them get started** with bot commands\n"
-                "• **Explain server rules** and channels\n"
-                "• **Be an awesome community ambassador**\n\n"
-                "**Track Your Success:**\n"
-                "• Use `/recruiter_stats` regularly\n"
-                "• Check who's still active with green ✅\n"
-                "• See your progress toward next rank\n"
-                "• Monitor your total XP earnings\n\n"
-                "### 🚨 **Important Notes**\n\n"
-                "• **No self-invites** - You can't invite yourself for XP\n"
-                "• **Active tracking** - System monitors if invitees stay\n"
-                "• **Fair play** - Quality recruiting encouraged over quantity\n"
-                "• **Integration** - Works with existing XP/leveling system\n\n"
-                "### 🌟 **Why Recruit?**\n\n"
-                "**Build Community:**\n"
-                "Every new member makes Palaemon stronger and more vibrant.\n\n"
-                "**Earn Recognition:**\n"
-                "Top recruiters get respect and special status in the community.\n\n"
-                "**Level Up Fast:**\n"
-                "Recruiting is one of the fastest ways to earn XP and climb ranks.\n\n"
-                "**Make Friends:**\n"
-                "Help new members settle in and build lasting connections.\n\n"
-                "**Grow the Movement:**\n"
-                "More members = stronger community = better for everyone!\n\n"
-                "---\n\n"
-                "*Ready to become a recruiting legend? Use `/create_invite` and start building the Palaemon empire!* 🚀"
-            ),
+            title="🎯 **Recruitment System Guide**",
+            description="Learn how to earn XP and PAL tokens by growing our community!",
             color=discord.Color.purple()
         )
-        embed.set_footer(text="📖 Palaemon Bot Guide • Page 6/8")
+        embed.set_footer(text="You'll receive the full recruitment guide via DM.")
         await inter.response.send_message(embed=embed, ephemeral=True)
 
-        # DM the recruitment guide file
+        # Send recruitment guide via DM
         try:
-            if os.path.exists(RECRUITMENT_MD):
-                await inter.user.send(
-                    content="📖 Here’s the **recruitment guide** for Palaemon Bot:",
-                    file=discord.File(RECRUITMENT_MD)
-                )
-            else:
-                await inter.user.send("ℹ️ Recruitment guide file not found on the server.")
-        except discord.Forbidden:
-            await inter.followup.send("⚠️ I couldn’t DM you (your DMs might be disabled).", ephemeral=True)
-
-    async def send_guide(self, user: discord.User, guide_type: str = "user"):
-        """Send comprehensive guide via DM"""
-        try:
-            # Add recruitment section
             recruitment_content = get_recruitment_guide()
             
-            embed = discord.Embed(
-                title="🎯 **RECRUITMENT SYSTEM** 🎯", 
-                description=recruitment_content[:4000],  # Discord embed limit
-                color=discord.Color.purple()
-            )
-            embed.set_footer(text="📖 Palaemon Bot Guide • Page 6/8")
-            await user.send(embed=embed)
-            
-            # If content is longer than 4000 chars, send additional embeds
+            # Split content if too long for single embed
             if len(recruitment_content) > 4000:
-                remaining = recruitment_content[4000:]
-                embed2 = discord.Embed(
-                    description=remaining[:4000],
+                # First part
+                embed1 = discord.Embed(
+                    title="🎯 **RECRUITMENT SYSTEM GUIDE** 🎯", 
+                    description=recruitment_content[:4000],
                     color=discord.Color.purple()
                 )
-                embed2.set_footer(text="📖 Palaemon Bot Guide • Page 6b/8")
-                await user.send(embed=embed2)
-
+                embed1.set_footer(text="📖 Recruitment Guide • Page 1/2")
+                await inter.user.send(embed=embed1)
+                
+                # Second part
+                embed2 = discord.Embed(
+                    description=recruitment_content[4000:],
+                    color=discord.Color.purple()
+                )
+                embed2.set_footer(text="📖 Recruitment Guide • Page 2/2")
+                await inter.user.send(embed=embed2)
+            else:
+                embed = discord.Embed(
+                    title="🎯 **RECRUITMENT SYSTEM GUIDE** 🎯",
+                    description=recruitment_content,
+                    color=discord.Color.purple()
+                )
+                await inter.user.send(embed=embed)
+                
         except discord.Forbidden:
-            return "❌ **DM Failed** - Enable DMs to receive the guide."
-        except Exception as e:
-            return f"❌ **Error:** {e}"
+            await inter.followup.send("⚠️ I couldn't DM you the guide (your DMs might be disabled).", ephemeral=True)
 
-    # Also update your help command to mention recruitment:
-
-    @GUILD_DEC
-    @app_commands.command(name="help", description="Get help with bot commands")
-    async def help_command(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🤖 **Palaemon Bot Commands**",
-            description="Here are all available commands organized by category:",
-            color=discord.Color.blue()
-        )
-        
-        # Add recruitment section to help
-        embed.add_field(
-            name="🎯 **Recruitment & Growth**",
-            value=(
-                "`/recruiter_stats` - View your recruitment achievements\n"
-                "`/recruiter_leaderboard` - Top community recruiters\n" 
-                "`/create_invite` - Create tracked invite links\n"
-                "*Earn XP by bringing new members to Palaemon!*"
-            ),
-            inline=False
-        )
-        
-        # ... rest of help content ...
+async def setup(bot):
+    await bot.add_cog(Guide(bot))
