@@ -158,10 +158,11 @@ COGS = [
     "cogs.leveling",         # XP system with daily, streaks, titles, boosts
     "cogs.verify",           # /verify flow (pro roles)
     "cogs.profile",          # /profile shows XP + verified roles
-    "cogs.guide",
+    "cogs.guide",            # /guide /admin_guide /recruitment_guide
+    "cogs.referrals",        # NEW: recruitment/referral system
+    "cogs.platypus",         # NEW: platypus images & daily posts
 
     # optional
-    # "cogs.verify" already included above if you enabled verify flow
     # "cogs.health" owner-only diag/reload if you add it later
 ]
 
