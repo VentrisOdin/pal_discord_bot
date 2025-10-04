@@ -72,3 +72,9 @@ class Storage:
                 (1 if verified else 0, str(user_id)),
             )
             await db.commit()
+
+    async def clear_seen(self):
+        """Clear all seen disaster items from the database."""
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("DELETE FROM seen_events")
+            await db.commit()

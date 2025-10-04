@@ -994,3 +994,6 @@ class Referrals(commands.Cog):
         embed.timestamp = datetime.now(timezone.utc)
         
         await interaction.response.send_message(embed=embed)
+
+async def setup(bot):
+    await bot.add_cog(Referrals(bot))

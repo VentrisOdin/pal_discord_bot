@@ -8,6 +8,7 @@ services:
       - ./.env:/app/.env:ro
     environment:
       - DB_PATH=/app/data/pal_bot.sqlite
+      # Remove all the ENABLE_* overrides - let .env handle them
     networks:
       - bot-network
     logging:
