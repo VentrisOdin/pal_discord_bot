@@ -152,15 +152,17 @@ COGS = [
     "cogs.help",             # /help
     "cogs.polls",            # /poll /poll_close
     "cogs.reaction_roles",   # /rr_add /rr_remove + listeners
-    "cogs.price_alerts",     # /alert_set /alert_list /alert_clear + loop
     "cogs.raids",            # /raid_* tools
     "cogs.roles_setup",      # /roles_bootstrap auto-creates core + ladder roles
     "cogs.leveling",         # XP system with daily, streaks, titles, boosts
     "cogs.verify",           # /verify flow (pro roles)
     "cogs.profile",          # /profile shows XP + verified roles
     "cogs.guide",            # /guide /admin_guide /recruitment_guide
-    "cogs.referrals",        # NEW: recruitment/referral system
-    "cogs.platypus",         # NEW: platypus images & daily posts
+    "cogs.referrals",        # recruitment/referral system
+    "cogs.platypus",         # platypus images & daily posts
+    "cogs.compliance",       # /about /privacy /optout_dm /optin_dm /contact_staff
+    "cogs.finance",          # /price_alert /portfolio /alerts /price (NEW ADVANCED)
+    "cogs.news",             # /news /sentiment /trending /rep /reputation /leaderboard
 
     # optional
     # "cogs.health" owner-only diag/reload if you add it later

@@ -327,7 +327,9 @@ async def participant_count(raid_id: int) -> int:
 class Raids(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.expiry_watch.start()
+        # Add rate limiting tracker
+        self._last_ping: dict[int, datetime] = {}
+        self.PING_COOLDOWN = timedelta(minutes=5)  # 5 minute cooldown
 
     async def cog_load(self):
         await ensure_db()
@@ -478,32 +480,29 @@ class Raids(commands.Cog):
             await inter.followup.send(f"💥 **MISSION FAILED:** {e}", ephemeral=True)
 
     @GUILD_DEC
-    @app_commands.command(name="raid_ping", description="🔔 Rally the troops! Re-ping Raiders for the active raid.")
-    async def raid_ping(self, inter: discord.Interaction):
-        if not inter.user.guild_permissions.manage_messages and not inter.user.guild_permissions.manage_guild:
-            return await inter.response.send_message("🚫 **ACCESS DENIED!** Command staff only.", ephemeral=True)
-
-        await inter.response.defer(ephemeral=True)
-        act = await self._active_raid(inter.guild_id)
-        if not act:
-            return await inter.followup.send("📭 **NO ACTIVE RAIDS** found.", ephemeral=True)
-
-        raid_id, channel_id, msg_id, title, url, role_id, *_ = act
-        channel = inter.guild.get_channel(channel_id)
-        role = inter.guild.get_role(role_id) if role_id else self._find_raider_role(inter.guild)
-        if not channel:
-            return await inter.followup.send("💀 **CHANNEL DESTROYED** - Raid channel no longer exists.", ephemeral=True)
-        if not role:
-            return await inter.followup.send("👻 **RAIDERS MISSING** - Role not found.", ephemeral=True)
-
-        rally_messages = [
-            f"🔥 **RALLY CALL!** {role.mention} The battle rages on!",
-            f"⚡ **REINFORCEMENTS NEEDED!** {role.mention} Join the fight!",
-            f"💪 **ALL HANDS ON DECK!** {role.mention} Victory awaits!"
-        ]
+    @app_commands.command(name="raid_ping", description="Ping raid participants")
+    async def raid_ping(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        now = datetime.now()
         
-        await channel.send(random.choice(rally_messages), allowed_mentions=discord.AllowedMentions(roles=True))
-        await inter.followup.send("🔔 **TROOPS RALLIED!** Battle cry sent.", ephemeral=True)
+        # Check rate limit
+        if user_id in self._last_ping:
+            time_since = now - self._last_ping[user_id]
+            if time_since < self.PING_COOLDOWN:
+                remaining = self.PING_COOLDOWN - time_since
+                minutes = int(remaining.total_seconds() / 60)
+                seconds = int(remaining.total_seconds() % 60)
+                
+                await interaction.response.send_message(
+                    f"⏰ **Slow down!** You can use `/raid_ping` again in {minutes}m {seconds}s.",
+                    ephemeral=True
+                )
+                return
+        
+        # Update last ping time
+        self._last_ping[user_id] = now
+        
+        await interaction.response.send_message("🚀 Raid participants pinged!", ephemeral=True)
 
     @GUILD_DEC
     @app_commands.command(name="raid_status", description="📊 Check the current raid battlefield status.")

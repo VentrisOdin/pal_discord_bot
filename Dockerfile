@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 # Set working directory
 WORKDIR /app
@@ -10,6 +10,7 @@ RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y \
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application
